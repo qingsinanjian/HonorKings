@@ -6,7 +6,7 @@ using UnityEngine;
 public class ByteArray
 {
     const int DEFAULT_SIZE = 1024;
-    private byte[] bytes;
+    public byte[] bytes;
 
     public int readIndex;
     public int writeIndex;
