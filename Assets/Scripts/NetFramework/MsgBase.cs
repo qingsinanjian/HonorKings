@@ -42,7 +42,7 @@ public class MsgBase
     public static byte[] EncodeName(MsgBase msgBase)
     {
         byte[] nameBytes = Encoding.UTF8.GetBytes(msgBase.protoName);
-        short nameLength = (short)nameBytes.Length;
+        short nameLength = (short)nameBytes.Length; 
         byte[] bytes = new byte[2 + nameLength];
 
         //bytes[0] = (byte)(nameLength % 256);//0000 0001 0000 0001

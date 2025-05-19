@@ -12,10 +12,13 @@ public static class NetManager
     /// </summary>
     private static ByteArray byteArray;
 
+    private static List<MsgBase> msgList;
+
     private static void Init()
     {
         socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         byteArray = new ByteArray();
+        msgList = new List<MsgBase>();
     }
 
     public static void Connect(string ip, int port)
@@ -89,8 +92,53 @@ public static class NetManager
         
     }
 
+    /// <summary>
+    /// 处理接收的数据
+    /// </summary>
     private static void OnReceiveData()
     {
+        if(byteArray.Length <= 2)
+        {
+            return;
+        }
+        byte[] bytes = byteArray.bytes;
+        int readIndex = byteArray.readIndex;
+        //short length = (short)(bytes[readIndex + 1] * 256 + bytes[readIndex]);
+        short length = (short)((bytes[readIndex] & 0x00FF) | (bytes[readIndex + 1] << 8));
 
+        if (byteArray.Length < length + 2)
+        {
+            return;
+        }
+        byteArray.readIndex += 2;
+        int nameCount = 0;
+        string protoName = MsgBase.DecodeName(byteArray.bytes, byteArray.readIndex, out nameCount);
+
+        if(string.IsNullOrEmpty(protoName))
+        {
+            Debug.LogError("协议名为空");
+            return;
+        }
+        byteArray.readIndex += nameCount;
+
+        //解析协议体
+        int bodyLength = length - nameCount;
+        MsgBase msgBase = MsgBase.Decode(protoName, byteArray.bytes, byteArray.readIndex, bodyLength);
+        byteArray.readIndex += bodyLength;
+
+        //移动数据
+        byteArray.MoveBytes();
+
+        //添加到消息列表
+        lock(msgList)
+        {
+            msgList.Add(msgBase);
+        }
+
+        //继续接收数据
+        if (byteArray.Length > 2)
+        {
+            OnReceiveData();
+        }
     }
 }
