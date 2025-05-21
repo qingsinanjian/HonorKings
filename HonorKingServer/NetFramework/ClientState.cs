@@ -14,10 +14,10 @@ public class ClientState
     /// <summary>
     /// 客户端Socket
     /// </summary>
-    Socket socket;
+    public Socket socket;
     /// <summary>
     /// 客户端的缓冲区
     /// </summary>
-    ByteArray readBuffer;
+    public ByteArray readBuffer;
 }
 
