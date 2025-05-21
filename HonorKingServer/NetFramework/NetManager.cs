@@ -124,8 +124,42 @@ public static class NetManager
         readBuffer.MoveBytes();
     }
 
+    /// <summary>
+    /// 处理消息
+    /// </summary>
+    /// <param name="state">客户端对象</param>
     private static void OnReceiveData(ClientState state)
     {
-        
+        ByteArray readBuffer = state.readBuffer;
+        byte[] bytes = readBuffer.bytes;
+        int readIndex = readBuffer.readIndex;
+
+        if (readBuffer.Length < 2)
+        {
+            return;
+        }
+        //解析总长度
+        short length = (short)(bytes[readIndex] + (bytes[readIndex + 1] << 8));
+        //收到的消息没有解析出来的多
+        if(readBuffer.Length < length)
+        {
+            return;
+        }
+        readBuffer.readIndex += 2;
+
+        int nameCount = 0;
+        string protoName = MsgBase.DecodeName(readBuffer.bytes, readBuffer.readIndex, out nameCount);
+        if(protoName == "")
+        {
+            Console.WriteLine("OnReceiveData 失败，协议名为空");
+            return;
+        }
+        readBuffer.readIndex += nameCount;
+
+        //解析消息体
+        int bodyLength = length - nameCount;
+        MsgBase msgBase = MsgBase.Decode(protoName, readBuffer.bytes, readBuffer.readIndex, bodyLength);
+        readBuffer.readIndex += bodyLength;
+        readBuffer.MoveBytes();
     }
 }
