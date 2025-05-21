@@ -162,4 +162,39 @@ public static class NetManager
         readBuffer.readIndex += bodyLength;
         readBuffer.MoveBytes();
     }
+
+    /// <summary>
+    /// 发送消息
+    /// </summary>
+    /// <param name="state">客户端对象</param>
+    /// <param name="msgBase">消息</param>
+    public static void Send(ClientState state, MsgBase msgBase)
+    {
+        if(state == null || state.socket == null || !state.socket.Connected)
+        {
+            Console.WriteLine("Send 失败，客户端对象为空或socket为空或未连接");
+            return;
+        }
+
+        //编码
+        byte[] nameBytes = MsgBase.EncodeName(msgBase);
+        byte[] bodyBytes = MsgBase.Encode(msgBase);
+        //消息长度
+        int length = nameBytes.Length + bodyBytes.Length;
+        //消息体
+        byte[] sendBytes = new byte[2 + length];
+        sendBytes[0] = (byte)(length % 256);
+        sendBytes[1] = (byte)(length / 256);
+        Array.Copy(nameBytes, 0, sendBytes, 2, nameBytes.Length);
+        Array.Copy(bodyBytes, 0, sendBytes, 2 + nameBytes.Length, bodyBytes.Length);
+
+        try
+        {
+            state.socket.Send(sendBytes, 0, sendBytes.Length, SocketFlags.None);
+        }
+        catch (SocketException e)
+        {
+            Console.WriteLine("Send 失败" + e.Message);
+        }
+    }
 }
