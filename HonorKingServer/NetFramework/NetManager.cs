@@ -56,6 +56,7 @@ public static class NetManager
                 else
                 {
                     //客户端有消息发送过来
+                    Receive(s);
                 }
             }
         }
@@ -70,7 +71,7 @@ public static class NetManager
         try
         {
             Socket socket = listenfd.Accept();
-            Console.WriteLine("有客户端连接成功" + socket.RemoteEndPoint.ToString());
+            Console.WriteLine("Accept成功" + socket.RemoteEndPoint.ToString());
             ClientState clientState = new ClientState();
             clientState.socket = socket;
             states.Add(socket, clientState);
@@ -79,5 +80,52 @@ public static class NetManager
         {
             Console.WriteLine("Accept失败" + e.Message);
         }
+    }
+
+    /// <summary>
+    /// 接收客户端发过来的消息
+    /// </summary>
+    /// <param name="s"></param>
+    private static void Receive(Socket socket)
+    {
+        ClientState clientState = states[socket];
+        ByteArray readBuffer = clientState.readBuffer;
+
+        if(readBuffer.Remain <= 0)
+        {
+            readBuffer.MoveBytes();
+        }
+        if(readBuffer.Remain <= 0)
+        {
+            Console.WriteLine("Receive失败，数组不够大");
+            return;
+        }
+
+        int count = 0;
+        try
+        {
+            count = socket.Receive(readBuffer.bytes, readBuffer.writeIndex, readBuffer.Remain, SocketFlags.None);
+        }
+        catch (SocketException e)
+        {
+            Console.WriteLine("Receive 失败," + e.Message);
+            return;
+        }
+
+        //客户端主动关闭
+        if(count <= 0)
+        {
+            Console.WriteLine("Socket Close:" + socket.RemoteEndPoint.ToString());
+            return;
+        }
+        readBuffer.writeIndex += count;
+        //处理消息
+        OnReceiveData(clientState);
+        readBuffer.MoveBytes();
+    }
+
+    private static void OnReceiveData(ClientState state)
+    {
+        
     }
 }
