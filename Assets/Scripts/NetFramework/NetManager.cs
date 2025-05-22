@@ -17,6 +17,14 @@ public static class NetManager
     /// </summary>
     private static List<MsgBase> msgList;
     /// <summary>
+    /// 是否正在连接
+    /// </summary>
+    private static bool isConnecting;
+    /// <summary>
+    /// 是否正在关闭
+    /// </summary>
+    private static bool isClosing;
+    /// <summary>
     /// 发送队列
     /// </summary>
     private static Queue<ByteArray> writeQueue;
@@ -27,15 +35,26 @@ public static class NetManager
         byteArray = new ByteArray();
         msgList = new List<MsgBase>();
         writeQueue = new Queue<ByteArray>();
+        isConnecting = false;
+        isClosing = false;
     }
 
     public static void Connect(string ip, int port)
     {
-        if (socket == null)
+        if(socket != null && socket.Connected)
         {
-            Init();
+            Debug.Log("已经连接，请勿重复连接！");
+            return;
         }
 
+        if (isConnecting)
+        {
+            Debug.Log("正在连接中，请稍后再试！");
+            return;
+        }
+        //初始化
+        Init();
+        isConnecting = true;
         socket.BeginConnect(ip, port, ConnectCallback, socket);
     }
 
@@ -50,12 +69,14 @@ public static class NetManager
             Socket socket = (Socket)ar.AsyncState;
             socket.EndConnect(ar);
             Debug.Log("连接成功");
+            isConnecting = false;
             //接收消息
             socket.BeginReceive(byteArray.bytes, byteArray.writeIndex, byteArray.Remain, SocketFlags.None, ReceiveCallback, socket);
         }
         catch (SocketException e)
         {
             Debug.LogError("连接失败: " + e.Message);
+            isConnecting = false;
         }
     }
 
@@ -97,7 +118,21 @@ public static class NetManager
 
     private static void Close()
     {
-
+        if(socket != null || !socket.Connected)
+        {
+            return;
+        }
+        if (isConnecting)
+            return;
+        //消息还没有发送完
+        if(writeQueue.Count > 0)
+        {
+            isClosing = true;
+        }
+        else
+        {
+            socket.Close();
+        }
     }
 
     /// <summary>
@@ -161,6 +196,14 @@ public static class NetManager
             Debug.LogError("Socket未连接");
             return;
         }
+        if (isConnecting)
+        {
+            return;
+        }
+        if(isClosing)
+        {
+            return;
+        }
         //编码
         byte[] nameBytes = MsgBase.EncodeName(msgBase);
         byte[] bodyBytes = MsgBase.Encode(msgBase);
@@ -217,9 +260,14 @@ public static class NetManager
                 ba = writeQueue.First();
             }
         }
-        if(ba != null)
+        //如果还有数据，继续发送
+        if (ba != null)
         {
             socket.BeginSend(ba.bytes, ba.readIndex, ba.Length, SocketFlags.None, SendCallback, socket);
+        }
+        if (isClosing)
+        {
+            socket.Close();
         }
     }
 }

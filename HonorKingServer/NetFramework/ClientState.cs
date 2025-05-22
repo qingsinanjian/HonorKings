@@ -18,6 +18,6 @@ public class ClientState
     /// <summary>
     /// 客户端的缓冲区
     /// </summary>
-    public ByteArray readBuffer;
+    public ByteArray readBuffer = new ByteArray();
 }
 
