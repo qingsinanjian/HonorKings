@@ -33,6 +33,22 @@ public static class NetManager
     /// </summary>
     private static int processMsgCount = 10;
     /// <summary>
+    /// 是否启用心跳机制
+    /// </summary>
+    private static bool isUsePing = true;
+    /// <summary>
+    /// 上一次发送ping的时间
+    /// </summary>
+    private static float lastPingTime = 0;
+    /// <summary>
+    /// 上一次接收pong的时间
+    /// </summary>
+    private static float lastPongTime = 0;
+    /// <summary>
+    /// 心跳机制的间隔时间
+    /// </summary>
+    private static float pingInterval = 30f;
+    /// <summary>
     /// 网络事件
     /// </summary>
     public enum NetEvent
@@ -159,6 +175,14 @@ public static class NetManager
         writeQueue = new Queue<ByteArray>();
         isConnecting = false;
         isClosing = false;
+
+        lastPingTime = Time.time;
+        lastPongTime = Time.time;
+
+        if(!msgListener.ContainsKey("MsgPong"))
+        {
+            AddMsgListener("MsgPong", OnMsgPong);
+        }
     }
 
     public static void Connect(string ip, int port)
@@ -399,7 +423,7 @@ public static class NetManager
     /// <summary>
     /// 处理消息
     /// </summary>
-    public static void MsgUpdate()
+    private static void MsgUpdate()
     {
         //没有消息
         if(msgList.Count == 0)
@@ -425,5 +449,36 @@ public static class NetManager
                 break;
             }
         }
+    }
+
+    private static void PingUpdate()
+    {
+        if(!isUsePing)
+        {
+            return;
+        }
+        if(Time.time - lastPingTime > pingInterval)
+        {
+            MsgBase msgBase = new MsgPing();
+            Send(msgBase);
+            lastPingTime = Time.time;
+        }
+
+        if(Time.time - lastPingTime > pingInterval * 4)
+        {
+            Debug.LogError("Ping超时！");
+            Close();
+        }
+    }
+
+    public static void Update()
+    {
+        PingUpdate();
+        MsgUpdate();
+    }
+
+    private static void OnMsgPong(MsgBase msgBase)
+    {
+        lastPongTime = Time.time;
     }
 }
