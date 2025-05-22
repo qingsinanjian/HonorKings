@@ -28,7 +28,68 @@ public static class NetManager
     /// 发送队列
     /// </summary>
     private static Queue<ByteArray> writeQueue;
-
+    /// <summary>
+    /// 网络事件
+    /// </summary>
+    public enum NetEvent
+    {
+        ConnectSucc = 1,
+        ConnectFail = 2,
+        Close = 3,
+    }
+    /// <summary>
+    /// 要执行的事件
+    /// </summary>
+    /// <param name="err"></param>
+    public delegate void EventListener(string err);
+    /// <summary>
+    /// 事件的字典
+    /// </summary>
+    private static Dictionary<NetEvent, EventListener> eventListener = new Dictionary<NetEvent, EventListener>();
+    /// <summary>
+    /// 添加事件监听
+    /// </summary>
+    /// <param name="netEvent"></param>
+    /// <param name="listener"></param>
+    public static void AddEventListener(NetEvent netEvent, EventListener listener)
+    {
+        if (eventListener.ContainsKey(netEvent))
+        {
+            eventListener[netEvent] += listener;
+        }
+        else
+        {
+            eventListener.Add(netEvent, listener);
+        }
+    }
+    /// <summary>
+    /// 移除事件监听
+    /// </summary>
+    /// <param name="netEvent"></param>
+    /// <param name="listener"></param>
+    public static void RemoveEventListener(NetEvent netEvent, EventListener listener)
+    {
+        if (eventListener.ContainsKey(netEvent))
+        {
+            eventListener[netEvent] -= listener;
+            if (eventListener[netEvent] == null)
+            {
+                eventListener.Remove(netEvent);
+            }
+        }
+    }
+    /// <summary>
+    /// 分发事件
+    /// </summary>
+    /// <param name="netEvent"></param>
+    /// <param name="err"></param>
+    public static void FireEvent(NetEvent netEvent, string err = "")
+    {
+        if (eventListener.ContainsKey(netEvent))
+        {
+            eventListener[netEvent].Invoke(err);
+        }
+    }
     private static void Init()
     {
         socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
@@ -69,6 +130,7 @@ public static class NetManager
             Socket socket = (Socket)ar.AsyncState;
             socket.EndConnect(ar);
             Debug.Log("连接成功");
+            FireEvent(NetEvent.ConnectSucc);
             isConnecting = false;
             //接收消息
             socket.BeginReceive(byteArray.bytes, byteArray.writeIndex, byteArray.Remain, SocketFlags.None, ReceiveCallback, socket);
@@ -76,6 +138,7 @@ public static class NetManager
         catch (SocketException e)
         {
             Debug.LogError("连接失败: " + e.Message);
+            FireEvent(NetEvent.ConnectFail, e.Message);
             isConnecting = false;
         }
     }
@@ -132,6 +195,7 @@ public static class NetManager
         else
         {
             socket.Close();
+            FireEvent(NetEvent.Close);
         }
     }
 
