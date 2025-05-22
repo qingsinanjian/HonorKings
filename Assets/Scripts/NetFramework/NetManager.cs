@@ -29,6 +29,10 @@ public static class NetManager
     /// </summary>
     private static Queue<ByteArray> writeQueue;
     /// <summary>
+    /// 一帧处理的最大消息数量
+    /// </summary>
+    private static int processMsgCount = 10;
+    /// <summary>
     /// 网络事件
     /// </summary>
     public enum NetEvent
@@ -90,6 +94,63 @@ public static class NetManager
             eventListener[netEvent].Invoke(err);
         }
     }
+    /// <summary>
+    /// 消息处理委托
+    /// </summary>
+    /// <param name="msgBase"></param>
+    public delegate void MsgListener(MsgBase msgBase);
+    /// <summary>
+    /// 消息事件字典
+    /// </summary>
+    private static Dictionary<string, MsgListener> msgListener = new Dictionary<string, MsgListener>();
+    /// <summary>
+    /// 添加事件监听
+    /// </summary>
+    /// <param name="msgName"></param>
+    /// <param name="listener"></param>
+    public static void AddMsgListener(string msgName, MsgListener listener)
+    {
+        if (msgListener.ContainsKey(msgName))
+        {
+            msgListener[msgName] += listener;
+        }
+        else
+        {
+            msgListener.Add(msgName, listener);
+        }
+    }
+    /// <summary>
+    /// 移除事件监听
+    /// </summary>
+    /// <param name="msgName"></param>
+    /// <param name="listener"></param>
+    public static void RemoveMsgListener(string msgName, MsgListener listener)
+    {
+        if (msgListener.ContainsKey(msgName))
+        {
+            msgListener[msgName] -= listener;
+            if (msgListener[msgName] == null)
+            {
+                msgListener.Remove(msgName);
+            }
+        }
+    }
+    /// <summary>
+    /// 封发消息事件
+    /// </summary>
+    /// <param name="msgName"></param>
+    /// <param name="msgBase"></param>
+    public static void FireMsg(string msgName, MsgBase msgBase)
+    {
+        if (msgListener.ContainsKey(msgName))
+        {
+            msgListener[msgName].Invoke(msgBase);
+        }
+    }
+
+    /// <summary>
+    /// 初始化
+    /// </summary>
     private static void Init()
     {
         socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
@@ -102,7 +163,7 @@ public static class NetManager
 
     public static void Connect(string ip, int port)
     {
-        if(socket != null && socket.Connected)
+        if (socket != null && socket.Connected)
         {
             Debug.Log("已经连接，请勿重复连接！");
             return;
@@ -181,14 +242,14 @@ public static class NetManager
 
     private static void Close()
     {
-        if(socket != null || !socket.Connected)
+        if (socket != null || !socket.Connected)
         {
             return;
         }
         if (isConnecting)
             return;
         //消息还没有发送完
-        if(writeQueue.Count > 0)
+        if (writeQueue.Count > 0)
         {
             isClosing = true;
         }
@@ -255,7 +316,7 @@ public static class NetManager
     /// <param name="msgBase"></param>
     public static void Send(MsgBase msgBase)
     {
-        if(socket == null || !socket.Connected)
+        if (socket == null || !socket.Connected)
         {
             Debug.LogError("Socket未连接");
             return;
@@ -264,7 +325,7 @@ public static class NetManager
         {
             return;
         }
-        if(isClosing)
+        if (isClosing)
         {
             return;
         }
@@ -279,15 +340,15 @@ public static class NetManager
         sendBytes[1] = (byte)(length / 256);
         Array.Copy(nameBytes, 0, sendBytes, 2, nameBytes.Length);
         Array.Copy(bodyBytes, 0, sendBytes, 2 + nameBytes.Length, bodyBytes.Length);
-        
+
         ByteArray byteArray = new ByteArray(sendBytes);
         int count = 0;
-        lock(writeQueue)
+        lock (writeQueue)
         {
             writeQueue.Enqueue(byteArray);
             count = writeQueue.Count;
         }
-        if(count == 1)
+        if (count == 1)
         {
             socket.BeginSend(byteArray.bytes, 0, byteArray.Length, SocketFlags.None, SendCallback, socket);
         }
@@ -300,23 +361,23 @@ public static class NetManager
     private static void SendCallback(IAsyncResult ar)
     {
         Socket socket = ar.AsyncState as Socket;
-        if(socket == null || !socket.Connected)
+        if (socket == null || !socket.Connected)
         {
             return;
         }
         int count = socket.EndSend(ar);
 
         ByteArray ba;
-        lock(writeQueue)
+        lock (writeQueue)
         {
             ba = writeQueue.First();
         }
 
         ba.readIndex += count;
         //如果发送完毕，移除队列
-        if(ba.Length == 0)
+        if (ba.Length == 0)
         {
-            lock(writeQueue)
+            lock (writeQueue)
             {
                 //清除
                 writeQueue.Dequeue();
@@ -332,6 +393,37 @@ public static class NetManager
         if (isClosing)
         {
             socket.Close();
+        }
+    }
+
+    /// <summary>
+    /// 处理消息
+    /// </summary>
+    public static void MsgUpdate()
+    {
+        //没有消息
+        if(msgList.Count == 0)
+        {
+            return;
+        }
+
+        for (int i = 0; i < processMsgCount; i++)
+        {
+            MsgBase msgBase = null;
+            lock(msgList)
+            {
+                msgBase = msgList[0];
+                msgList.RemoveAt(0);
+            }
+
+            if(msgBase != null)
+            {
+                FireMsg(msgBase.protoName, msgBase);
+            }
+            else
+            {
+                break;
+            }
         }
     }
 }
