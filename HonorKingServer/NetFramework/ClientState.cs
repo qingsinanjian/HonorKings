@@ -19,5 +19,7 @@ public class ClientState
     /// 客户端的缓冲区
     /// </summary>
     public ByteArray readBuffer = new ByteArray();
+
+    public float lastPingTime = 0;
 }
 

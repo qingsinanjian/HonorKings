@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection;
 #nullable disable
 
 public static class NetManager
@@ -20,6 +21,8 @@ public static class NetManager
     /// 用于检测的列表
     /// </summary>
     public static List<Socket> sockets = new List<Socket>();
+
+    private static float pingInterval = 30;
     /// <summary>
     /// 连接服务器
     /// </summary>
@@ -59,6 +62,7 @@ public static class NetManager
                     Receive(s);
                 }
             }
+            CheckPing();
         }
     }
 
@@ -161,6 +165,26 @@ public static class NetManager
         MsgBase msgBase = MsgBase.Decode(protoName, readBuffer.bytes, readBuffer.readIndex, bodyLength);
         readBuffer.readIndex += bodyLength;
         readBuffer.MoveBytes();
+
+        //通过反射调用客户端发过来的协议对应的方法
+        MethodInfo methodInfo = typeof(MsgHandler).GetMethod(protoName);
+        Console.WriteLine("ReceiveData:" + protoName + " " + state.socket.RemoteEndPoint.ToString());
+        if(methodInfo != null)
+        {
+            //要执行方法的参数
+            object[] o = { state, msgBase };
+            //调用方法
+            methodInfo.Invoke(null, o);
+        }
+        else
+        {
+            Console.WriteLine("OnReceiveData 失败，方法不存在" + protoName);
+        }
+
+        if(readBuffer.Length > 2)
+        {
+            OnReceiveData(state);
+        }
     }
 
     /// <summary>
@@ -195,6 +219,40 @@ public static class NetManager
         catch (SocketException e)
         {
             Console.WriteLine("Send 失败" + e.Message);
+        }
+    }
+
+    /// <summary>
+    /// 关闭对应的客户端
+    /// </summary>
+    /// <param name="state"></param>
+    private static void Close(ClientState state)
+    {
+        state.socket.Close();
+        states.Remove(state.socket);
+    }
+
+    /// <summary>
+    /// 获取时间戳
+    /// </summary>
+    /// <returns></returns>
+    public static long GetTimeStamp()
+    {
+        TimeSpan ts = DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        return Convert.ToInt64(ts.TotalSeconds);
+    }
+
+    private static void CheckPing()
+    {
+        foreach (var state in states.Values)
+        {
+            if (GetTimeStamp() - state.lastPingTime > pingInterval * 4)
+            {
+                Console.WriteLine("心跳机制，断开连接" + state.socket.RemoteEndPoint.ToString());
+                //关闭客户端
+                Close(state);
+                return;
+            }
         }
     }
 }
