@@ -16,3 +16,5 @@ D:\project\UnityProjects\HonorKings\HonorKingServer\obj\Debug\net8.0\refint\Hono
 D:\project\UnityProjects\HonorKings\HonorKingServer\obj\Debug\net8.0\HonorKingServer.pdb
 D:\project\UnityProjects\HonorKings\HonorKingServer\obj\Debug\net8.0\HonorKingServer.genruntimeconfig.cache
 D:\project\UnityProjects\HonorKings\HonorKingServer\obj\Debug\net8.0\ref\HonorKingServer.dll
+D:\project\UnityProjects\HonorKings\HonorKingServer\bin\Debug\net8.0\protobuf-net.dll
+D:\project\UnityProjects\HonorKings\HonorKingServer\bin\Debug\net8.0\protobuf-net.Core.dll

@@ -1,9 +1,9 @@
 
 
-public class MsgPing : MsgBase
-{
-    public MsgPing()
-    {
-        protoName = "MsgPing";
-    }
-}
+//public class MsgPing : MsgBase
+//{
+//    public MsgPing()
+//    {
+//        protoName = "MsgPing";
+//    }
+//}
