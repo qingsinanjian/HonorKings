@@ -47,7 +47,7 @@ public static class NetManager
     /// <summary>
     /// 心跳机制的间隔时间
     /// </summary>
-    private static float pingInterval = 30f;
+    private static float pingInterval = 2f;
     /// <summary>
     /// 网络事件
     /// </summary>
@@ -266,7 +266,7 @@ public static class NetManager
 
     private static void Close()
     {
-        if (socket != null || !socket.Connected)
+        if (socket == null || !socket.Connected)
         {
             return;
         }
@@ -436,8 +436,11 @@ public static class NetManager
             MsgBase msgBase = null;
             lock(msgList)
             {
-                msgBase = msgList[0];
-                msgList.RemoveAt(0);
+                if(msgList.Count > 0)
+                {
+                    msgBase = msgList[0];
+                    msgList.RemoveAt(0);
+                }
             }
 
             if(msgBase != null)
@@ -459,14 +462,15 @@ public static class NetManager
         }
         if(Time.time - lastPingTime > pingInterval)
         {
+            //发送
             MsgBase msgBase = new MsgPing();
             Send(msgBase);
             lastPingTime = Time.time;
         }
-
-        if(Time.time - lastPingTime > pingInterval * 4)
+        //断开的处理
+        if(Time.time - lastPongTime > pingInterval * 4)
         {
-            Debug.LogError("Ping超时！");
+            Debug.Log("Ping超时！");
             Close();
         }
     }

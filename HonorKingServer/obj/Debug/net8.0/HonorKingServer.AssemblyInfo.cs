@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("HonorKingServer")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+43186239957209c5461f0dad011b6f249e36fd0b")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+2843e2bd95f245a8d682f982ce05acd0f895a017")]
 [assembly: System.Reflection.AssemblyProductAttribute("HonorKingServer")]
 [assembly: System.Reflection.AssemblyTitleAttribute("HonorKingServer")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

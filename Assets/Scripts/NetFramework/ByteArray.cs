@@ -45,7 +45,7 @@ public class ByteArray
         capacity = defaultBytes.Length;
         initSize = defaultBytes.Length;
         readIndex = 0;
-        writeIndex = 0;
+        writeIndex = defaultBytes.Length;
     }
 
     public void MoveBytes()

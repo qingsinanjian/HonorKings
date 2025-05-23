@@ -22,7 +22,7 @@ public static class NetManager
     /// </summary>
     public static List<Socket> sockets = new List<Socket>();
 
-    private static float pingInterval = 30;
+    private static float pingInterval = 2;
     /// <summary>
     /// 连接服务器
     /// </summary>
@@ -76,9 +76,10 @@ public static class NetManager
         {
             Socket socket = listenfd.Accept();
             Console.WriteLine("Accept成功" + socket.RemoteEndPoint.ToString());
-            ClientState clientState = new ClientState();
-            clientState.socket = socket;
-            states.Add(socket, clientState);
+            ClientState state = new ClientState();
+            state.socket = socket;
+            state.lastPingTime = GetTimeStamp();
+            states.Add(socket, state);
         }
         catch (SocketException e)
         {
