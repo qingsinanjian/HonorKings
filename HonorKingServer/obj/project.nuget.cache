@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "E+ag+HNxFP8=",
+  "dgSpecHash": "3W9vfkOwevo=",
   "success": true,
-  "projectFilePath": "D:\\project\\UnityProjects\\HonorKings\\HonorKingServer\\HonorKingServer.csproj",
+  "projectFilePath": "D:\\project\\UnityProjects\\HonorKings\\HonorKingServer\\MOBAGatewayServer.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\ex_wujx13\\.nuget\\packages\\newtonsoft.json\\13.0.3\\newtonsoft.json.13.0.3.nupkg.sha512",
     "C:\\Users\\ex_wujx13\\.nuget\\packages\\protobuf-net\\3.2.52\\protobuf-net.3.2.52.nupkg.sha512",

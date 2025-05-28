@@ -18,8 +18,8 @@ public class MsgHandler
     public static void MsgPing(ClientState state, IExtensible msgBase)
     {
         Console.WriteLine("MsgPing:" + state.socket.RemoteEndPoint);
-        state.lastPingTime = Gateway.GetTimeStamp();
+        state.lastPingTime = NetManager.GetTimeStamp();
         MsgPong msgPong = new MsgPong();
-        Gateway.Send(state, msgPong);
+        NetManager.Send(state, msgPong);
     }
 }

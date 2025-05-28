@@ -133,9 +133,9 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "D:\\project\\UnityProjects\\HonorKings\\HonorKingServer\\HonorKingServer.csproj",
-      "projectName": "HonorKingServer",
-      "projectPath": "D:\\project\\UnityProjects\\HonorKings\\HonorKingServer\\HonorKingServer.csproj",
+      "projectUniqueName": "D:\\project\\UnityProjects\\HonorKings\\HonorKingServer\\MOBAGatewayServer.csproj",
+      "projectName": "MOBAGatewayServer",
+      "projectPath": "D:\\project\\UnityProjects\\HonorKings\\HonorKingServer\\MOBAGatewayServer.csproj",
       "packagesPath": "C:\\Users\\ex_wujx13\\.nuget\\packages\\",
       "outputPath": "D:\\project\\UnityProjects\\HonorKings\\HonorKingServer\\obj\\",
       "projectStyle": "PackageReference",

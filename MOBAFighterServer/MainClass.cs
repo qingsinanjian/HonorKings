@@ -10,7 +10,7 @@ namespace HonorKingServer
     {
         public static void Main()
         {
-            Gateway.Connect("127.0.0.1", 8888);
+            NetManager.Connect("127.0.0.1", 8888);
         }
     }
 }
