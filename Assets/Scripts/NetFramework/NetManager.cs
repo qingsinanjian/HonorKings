@@ -499,6 +499,11 @@ using UnityEngine;
 
 public static class NetManager
 {
+    public enum ServerType
+    {
+        Gateway,//网关服务器
+        Fighter,//战斗服务器
+    }
     private static Socket socket;
     /// <summary>
     /// 字节数组
@@ -830,7 +835,7 @@ public static class NetManager
     /// 发送协议
     /// </summary>
     /// <param name="msgBase"></param>
-    public static void Send(IExtensible msgBase)
+    public static void Send(IExtensible msgBase, ServerType serverType)
     {
         if (socket == null || !socket.Connected)
         {
@@ -854,8 +859,9 @@ public static class NetManager
         byte[] sendBytes = new byte[2 + length];
         sendBytes[0] = (byte)(length % 256);
         sendBytes[1] = (byte)(length / 256);
-        Array.Copy(nameBytes, 0, sendBytes, 2, nameBytes.Length);
-        Array.Copy(bodyBytes, 0, sendBytes, 2 + nameBytes.Length, bodyBytes.Length);
+        sendBytes[2] = (byte)serverType; // 添加服务器类型字节
+        Array.Copy(nameBytes, 0, sendBytes, 3, nameBytes.Length);
+        Array.Copy(bodyBytes, 0, sendBytes, 3 + nameBytes.Length, bodyBytes.Length);
 
         ByteArray byteArray = new ByteArray(sendBytes);
         int count = 0;
