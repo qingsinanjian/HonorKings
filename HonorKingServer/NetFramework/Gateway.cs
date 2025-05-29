@@ -292,6 +292,10 @@ public static class Gateway
     /// </summary>
     public static Dictionary<Socket, ServerState> serverStates = new Dictionary<Socket, ServerState>();
     /// <summary>
+    /// 通过id找到相应客户端的字典
+    /// </summary>
+    public static Dictionary<uint, ClientState> id2cs = new Dictionary<uint, ClientState>();
+    /// <summary>
     /// 用于检测的列表
     /// </summary>
     public static List<Socket> sockets = new List<Socket>();
@@ -409,21 +413,62 @@ public static class Gateway
         //处理接收到的消息
         byteArray.readIndex += count;
         OnReceiveData(serverState);
+        byteArray.MoveBytes();
     }
 
     /// <summary>
-    /// 接收其他服务器发过来的消息
+    /// 处理其他服务器发过来的消息
     /// </summary>
     /// <param name="serverState"></param>
     private static void OnReceiveData(ServerState serverState)
     {
+        ByteArray byteArray = serverState.readBuffer;
+        byte[] bytes = byteArray.bytes;
+        if(byteArray.Length < 2)
+        {
+            return;
+        }
+        //解析总长度
+        short length = (short)(bytes[byteArray.readIndex] + (bytes[byteArray.readIndex + 1] << 8));
+        if(byteArray.Length < length + 2)
+        {
+            return;
+        }
+        uint guid = (uint)(bytes[byteArray.readIndex + 2] << 24 | 
+                    bytes[byteArray.readIndex + 3] << 16 |
+                    bytes[byteArray.readIndex + 4] << 8|
+                    bytes[byteArray.readIndex + 5]);
+        byteArray.readIndex += 6;
 
+        try
+        {
+            int msgLength = length - 4;
+            //发送给客户端的消息
+            byte[] sendBytes = new byte[msgLength + 2];
+            //打包长度
+            sendBytes[0] = (byte)(msgLength % 256);
+            sendBytes[1] = (byte)(msgLength / 256);
+
+            Array.Copy(bytes, byteArray.readIndex, sendBytes, 2, msgLength);
+            id2cs[guid].socket.Send(sendBytes, 0, sendBytes.Length, SocketFlags.None);
+        }
+        catch (SocketException e)
+        {
+            Console.WriteLine(e.Message);
+        }
+        byteArray.readIndex += length - 4;
+
+        //如果还有数据，继续处理
+        if(byteArray.Length > 2)
+        {
+            OnReceiveData(serverState);
+        }
     }
 
     /// <summary>
-    /// 接收
+    /// 接收客户端的连接
     /// </summary>
-    /// <param name="listenfd"></param>
+    /// <param name="listenfd">服务端的socket</param>
     private static void Accept(Socket listenfd)
     {
         try
@@ -432,6 +477,11 @@ public static class Gateway
             Console.WriteLine("Accept成功" + socket.RemoteEndPoint.ToString());
             ClientState state = new ClientState();
             state.socket = socket;
+
+            uint guid = MyGuid.GetGuid();
+            //将客户端的Guid和ClientState绑定
+            id2cs.Add(guid, state);
+
             state.lastPingTime = GetTimeStamp();
             clientStates.Add(socket, state);
         }

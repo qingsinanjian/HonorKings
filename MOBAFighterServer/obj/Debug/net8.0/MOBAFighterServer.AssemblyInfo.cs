@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("MOBAFighterServer")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f8f757a04b60e23f64efaefb24b9b374718dace2")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+d8d3e1283d399e6606730d4ab0bfd2914ab51cf9")]
 [assembly: System.Reflection.AssemblyProductAttribute("MOBAFighterServer")]
 [assembly: System.Reflection.AssemblyTitleAttribute("MOBAFighterServer")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
