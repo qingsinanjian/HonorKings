@@ -12,6 +12,10 @@ using System.Threading.Tasks;
 public class ClientState
 {
     /// <summary>
+    /// 客户端的唯一标识符
+    /// </summary>
+    public uint guid;
+    /// <summary>
     /// 客户端Socket
     /// </summary>
     public Socket socket;

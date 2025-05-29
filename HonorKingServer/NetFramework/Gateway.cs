@@ -296,6 +296,10 @@ public static class Gateway
     /// </summary>
     public static Dictionary<uint, ClientState> id2cs = new Dictionary<uint, ClientState>();
     /// <summary>
+    /// 服务器类型和服务器的映射
+    /// </summary>
+    public static Dictionary<ServerType, ServerState> type2ss = new Dictionary<ServerType, ServerState>();
+    /// <summary>
     /// 用于检测的列表
     /// </summary>
     public static List<Socket> sockets = new List<Socket>();
@@ -479,6 +483,7 @@ public static class Gateway
             state.socket = socket;
 
             uint guid = MyGuid.GetGuid();
+            state.guid = guid;
             //将客户端的Guid和ClientState绑定
             id2cs.Add(guid, state);
 
@@ -557,43 +562,76 @@ public static class Gateway
         {
             return;
         }
-        readBuffer.readIndex += 2;
 
-        int nameCount = 0;
-        string protoName = ProtobufTool.DecodeName(readBuffer.bytes, readBuffer.readIndex, out nameCount);
-        if (protoName == "")
+        ServerType serverType = (ServerType)bytes[readIndex + 2];//获取服务器类型
+        readBuffer.readIndex += 3;
+
+        try
         {
-            Console.WriteLine("OnReceiveData 失败，协议名为空");
-            Close(state);
-            return;
-        }
-        readBuffer.readIndex += nameCount;
+            //减去一个字节的服务器类型，留四位作为id
+            int sendLength = length - 1 + 4;
+            byte[] sendBytes = new byte[sendLength + 2];
+            sendBytes[0] = (byte)(sendLength % 256);
+            sendBytes[1] = (byte)(sendLength / 256);
 
-        //解析消息体
-        int bodyLength = length - nameCount;
-        IExtensible msgBase = ProtobufTool.Decode(protoName, readBuffer.bytes, readBuffer.readIndex, bodyLength);
-        readBuffer.readIndex += bodyLength;
+            sendBytes[2] = ( byte)(state.guid >> 24);
+            sendBytes[3] = (byte)((state.guid >> 16) & 0xff);
+            sendBytes[4] = (byte)((state.guid >> 8) & 0xff);
+            sendBytes[5] = (byte)(state.guid & 0xff);
+
+            Array.Copy(bytes, readBuffer.readIndex, sendBytes, 6, sendLength - 4);
+            type2ss[serverType].socket.Send(sendBytes, 0, sendLength + 2, SocketFlags.None);
+        }
+        catch (Exception)
+        {
+
+            throw;
+        }
+
+        readBuffer.readIndex += length - 1;
         readBuffer.MoveBytes();
 
-        //通过反射调用客户端发过来的协议对应的方法
-        MethodInfo methodInfo = typeof(MsgHandler).GetMethod(protoName);
-        Console.WriteLine("ReceiveData:" + protoName + " " + state.socket.RemoteEndPoint.ToString());
-        if (methodInfo != null)
-        {
-            //要执行方法的参数
-            object[] o = { state, msgBase };
-            //调用方法
-            methodInfo.Invoke(null, o);
-        }
-        else
-        {
-            Console.WriteLine("OnReceiveData 失败，方法不存在" + protoName);
-        }
-
-        if (readBuffer.Length > 2)
+        //继续处理
+        if(readBuffer.Length > 2)
         {
             OnReceiveData(state);
         }
+
+        //int nameCount = 0;
+        //string protoName = ProtobufTool.DecodeName(readBuffer.bytes, readBuffer.readIndex, out nameCount);
+        //if (protoName == "")
+        //{
+        //    Console.WriteLine("OnReceiveData 失败，协议名为空");
+        //    Close(state);
+        //    return;
+        //}
+        //readBuffer.readIndex += nameCount;
+
+        ////解析消息体
+        //int bodyLength = length - nameCount;
+        //IExtensible msgBase = ProtobufTool.Decode(protoName, readBuffer.bytes, readBuffer.readIndex, bodyLength);
+        //readBuffer.readIndex += bodyLength;
+        //readBuffer.MoveBytes();
+
+        ////通过反射调用客户端发过来的协议对应的方法
+        //MethodInfo methodInfo = typeof(MsgHandler).GetMethod(protoName);
+        //Console.WriteLine("ReceiveData:" + protoName + " " + state.socket.RemoteEndPoint.ToString());
+        //if (methodInfo != null)
+        //{
+        //    //要执行方法的参数
+        //    object[] o = { state, msgBase };
+        //    //调用方法
+        //    methodInfo.Invoke(null, o);
+        //}
+        //else
+        //{
+        //    Console.WriteLine("OnReceiveData 失败，方法不存在" + protoName);
+        //}
+
+        //if (readBuffer.Length > 2)
+        //{
+        //    OnReceiveData(state);
+        //}
     }
 
     /// <summary>
