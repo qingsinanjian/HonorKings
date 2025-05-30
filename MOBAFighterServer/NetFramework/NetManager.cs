@@ -2,205 +2,357 @@
 //using System.Collections;
 //using System.Collections.Generic;
 //using System.Linq;
-//using System.Net;
 //using System.Net.Sockets;
-//using System.Reflection;
-//#nullable disable
+//using UnityEngine;
 
 //public static class NetManager
 //{
+//    private static Socket socket;
 //    /// <summary>
-//    /// 服务端Socket
+//    /// 字节数组
 //    /// </summary>
-//    public static Socket listenfd;
+//    private static ByteArray byteArray;
 //    /// <summary>
-//    /// 客户端字典
+//    /// 消息列表
 //    /// </summary>
-//    public static Dictionary<Socket, ClientState> states = new Dictionary<Socket, ClientState>();
+//    private static List<MsgBase> msgList;
 //    /// <summary>
-//    /// 用于检测的列表
+//    /// 是否正在连接
 //    /// </summary>
-//    public static List<Socket> sockets = new List<Socket>();
-
-//    private static float pingInterval = 2;
+//    private static bool isConnecting;
 //    /// <summary>
-//    /// 连接服务器
+//    /// 是否正在关闭
 //    /// </summary>
-//    /// <param name="ip"></param>
-//    /// <param name="port"></param>
-//    public static void Connect(string ip, int port)
+//    private static bool isClosing;
+//    /// <summary>
+//    /// 发送队列
+//    /// </summary>
+//    private static Queue<ByteArray> writeQueue;
+//    /// <summary>
+//    /// 一帧处理的最大消息数量
+//    /// </summary>
+//    private static int processMsgCount = 10;
+//    /// <summary>
+//    /// 是否启用心跳机制
+//    /// </summary>
+//    private static bool isUsePing = true;
+//    /// <summary>
+//    /// 上一次发送ping的时间
+//    /// </summary>
+//    private static float lastPingTime = 0;
+//    /// <summary>
+//    /// 上一次接收pong的时间
+//    /// </summary>
+//    private static float lastPongTime = 0;
+//    /// <summary>
+//    /// 心跳机制的间隔时间
+//    /// </summary>
+//    private static float pingInterval = 2f;
+//    /// <summary>
+//    /// 网络事件
+//    /// </summary>
+//    public enum NetEvent
 //    {
-//        listenfd = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-//        IPAddress ipAddress = IPAddress.Parse(ip);
-//        IPEndPoint ipEndPoint = new IPEndPoint(ipAddress, port);
-//        listenfd.Bind(ipEndPoint);
-//        listenfd.Listen(0);
-
-//        Console.WriteLine("服务器启动成功");
-//        while (true)
-//        {
-//            sockets.Clear();
-//            //放服务端的socket
-//            sockets.Add(listenfd);
-//            //放客户端的socket
-//            foreach (Socket socket in states.Keys)
-//            {
-//                sockets.Add(socket);
-//            }
-//            Socket.Select(sockets, null, null, 1000);
-//            for (int i = 0; i < sockets.Count; i++)
-//            {
-//                Socket s = sockets[i];
-//                if(s == listenfd)
-//                {
-//                    //有客户端连接
-//                    Accept(s);
-//                }
-//                else
-//                {
-//                    //客户端有消息发送过来
-//                    Receive(s);
-//                }
-//            }
-//            CheckPing();
-//        }
+//        ConnectSucc = 1,
+//        ConnectFail = 2,
+//        Close = 3,
 //    }
-
 //    /// <summary>
-//    /// 接收
+//    /// 要执行的事件
 //    /// </summary>
-//    /// <param name="listenfd"></param>
-//    private static void Accept(Socket listenfd)
-//    {
-//        try
-//        {
-//            Socket socket = listenfd.Accept();
-//            Console.WriteLine("Accept成功" + socket.RemoteEndPoint.ToString());
-//            ClientState state = new ClientState();
-//            state.socket = socket;
-//            state.lastPingTime = GetTimeStamp();
-//            states.Add(socket, state);
-//        }
-//        catch (SocketException e)
-//        {
-//            Console.WriteLine("Accept失败" + e.Message);
-//        }
-//    }
-
+//    /// <param name="err"></param>
+//    public delegate void EventListener(string err);
 //    /// <summary>
-//    /// 接收客户端发过来的消息
+//    /// 事件的字典
 //    /// </summary>
-//    /// <param name="s"></param>
-//    private static void Receive(Socket socket)
-//    {
-//        ClientState clientState = states[socket];
-//        ByteArray readBuffer = clientState.readBuffer;
-
-//        if(readBuffer.Remain <= 0)
-//        {
-//            readBuffer.MoveBytes();
-//        }
-//        if(readBuffer.Remain <= 0)
-//        {
-//            Console.WriteLine("Receive失败，数组不够大");
-//            return;
-//        }
-
-//        int count = 0;
-//        try
-//        {
-//            count = socket.Receive(readBuffer.bytes, readBuffer.writeIndex, readBuffer.Remain, SocketFlags.None);
-//        }
-//        catch (SocketException e)
-//        {
-//            Console.WriteLine("Receive 失败," + e.Message);
-//            return;
-//        }
-
-//        //客户端主动关闭
-//        if(count <= 0)
-//        {
-//            Console.WriteLine("Socket Close:" + socket.RemoteEndPoint.ToString());
-//            return;
-//        }
-//        readBuffer.writeIndex += count;
-//        //处理消息
-//        OnReceiveData(clientState);
-//        readBuffer.MoveBytes();
-//    }
-
+//    private static Dictionary<NetEvent, EventListener> eventListener = new Dictionary<NetEvent, EventListener>();
 //    /// <summary>
-//    /// 处理消息
+//    /// 添加事件监听
 //    /// </summary>
-//    /// <param name="state">客户端对象</param>
-//    private static void OnReceiveData(ClientState state)
+//    /// <param name="netEvent"></param>
+//    /// <param name="listener"></param>
+//    public static void AddEventListener(NetEvent netEvent, EventListener listener)
 //    {
-//        ByteArray readBuffer = state.readBuffer;
-//        byte[] bytes = readBuffer.bytes;
-//        int readIndex = readBuffer.readIndex;
-
-//        if (readBuffer.Length < 2)
+//        if (eventListener.ContainsKey(netEvent))
 //        {
-//            return;
-//        }
-//        //解析总长度
-//        short length = (short)(bytes[readIndex] + (bytes[readIndex + 1] << 8));
-//        //收到的消息没有解析出来的多
-//        if(readBuffer.Length < length)
-//        {
-//            return;
-//        }
-//        readBuffer.readIndex += 2;
-
-//        int nameCount = 0;
-//        string protoName = MsgBase.DecodeName(readBuffer.bytes, readBuffer.readIndex, out nameCount);
-//        if(protoName == "")
-//        {
-//            Console.WriteLine("OnReceiveData 失败，协议名为空");
-//            return;
-//        }
-//        readBuffer.readIndex += nameCount;
-
-//        //解析消息体
-//        int bodyLength = length - nameCount;
-//        MsgBase msgBase = MsgBase.Decode(protoName, readBuffer.bytes, readBuffer.readIndex, bodyLength);
-//        readBuffer.readIndex += bodyLength;
-//        readBuffer.MoveBytes();
-
-//        //通过反射调用客户端发过来的协议对应的方法
-//        MethodInfo methodInfo = typeof(MsgHandler).GetMethod(protoName);
-//        Console.WriteLine("ReceiveData:" + protoName + " " + state.socket.RemoteEndPoint.ToString());
-//        if(methodInfo != null)
-//        {
-//            //要执行方法的参数
-//            object[] o = { state, msgBase };
-//            //调用方法
-//            methodInfo.Invoke(null, o);
+//            eventListener[netEvent] += listener;
 //        }
 //        else
 //        {
-//            Console.WriteLine("OnReceiveData 失败，方法不存在" + protoName);
+//            eventListener.Add(netEvent, listener);
 //        }
-
-//        if(readBuffer.Length > 2)
+//    }
+//    /// <summary>
+//    /// 移除事件监听
+//    /// </summary>
+//    /// <param name="netEvent"></param>
+//    /// <param name="listener"></param>
+//    public static void RemoveEventListener(NetEvent netEvent, EventListener listener)
+//    {
+//        if (eventListener.ContainsKey(netEvent))
 //        {
-//            OnReceiveData(state);
+//            eventListener[netEvent] -= listener;
+//            if (eventListener[netEvent] == null)
+//            {
+//                eventListener.Remove(netEvent);
+//            }
+//        }
+//    }
+//    /// <summary>
+//    /// 分发事件
+//    /// </summary>
+//    /// <param name="netEvent"></param>
+//    /// <param name="err"></param>
+//    public static void FireEvent(NetEvent netEvent, string err = "")
+//    {
+//        if (eventListener.ContainsKey(netEvent))
+//        {
+//            eventListener[netEvent].Invoke(err);
+//        }
+//    }
+//    /// <summary>
+//    /// 消息处理委托
+//    /// </summary>
+//    /// <param name="msgBase"></param>
+//    public delegate void MsgListener(MsgBase msgBase);
+//    /// <summary>
+//    /// 消息事件字典
+//    /// </summary>
+//    private static Dictionary<string, MsgListener> msgListener = new Dictionary<string, MsgListener>();
+//    /// <summary>
+//    /// 添加事件监听
+//    /// </summary>
+//    /// <param name="msgName"></param>
+//    /// <param name="listener"></param>
+//    public static void AddMsgListener(string msgName, MsgListener listener)
+//    {
+//        if (msgListener.ContainsKey(msgName))
+//        {
+//            msgListener[msgName] += listener;
+//        }
+//        else
+//        {
+//            msgListener.Add(msgName, listener);
+//        }
+//    }
+//    /// <summary>
+//    /// 移除事件监听
+//    /// </summary>
+//    /// <param name="msgName"></param>
+//    /// <param name="listener"></param>
+//    public static void RemoveMsgListener(string msgName, MsgListener listener)
+//    {
+//        if (msgListener.ContainsKey(msgName))
+//        {
+//            msgListener[msgName] -= listener;
+//            if (msgListener[msgName] == null)
+//            {
+//                msgListener.Remove(msgName);
+//            }
+//        }
+//    }
+//    /// <summary>
+//    /// 封发消息事件
+//    /// </summary>
+//    /// <param name="msgName"></param>
+//    /// <param name="msgBase"></param>
+//    public static void FireMsg(string msgName, MsgBase msgBase)
+//    {
+//        if (msgListener.ContainsKey(msgName))
+//        {
+//            msgListener[msgName].Invoke(msgBase);
 //        }
 //    }
 
 //    /// <summary>
-//    /// 发送消息
+//    /// 初始化
 //    /// </summary>
-//    /// <param name="state">客户端对象</param>
-//    /// <param name="msgBase">消息</param>
-//    public static void Send(ClientState state, MsgBase msgBase)
+//    private static void Init()
 //    {
-//        if(state == null || state.socket == null || !state.socket.Connected)
+//        socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+//        byteArray = new ByteArray();
+//        msgList = new List<MsgBase>();
+//        writeQueue = new Queue<ByteArray>();
+//        isConnecting = false;
+//        isClosing = false;
+
+//        lastPingTime = Time.time;
+//        lastPongTime = Time.time;
+
+//        if(!msgListener.ContainsKey("MsgPong"))
 //        {
-//            Console.WriteLine("Send 失败，客户端对象为空或socket为空或未连接");
+//            AddMsgListener("MsgPong", OnMsgPong);
+//        }
+//    }
+
+//    public static void Connect(string ip, int port)
+//    {
+//        if (socket != null && socket.Connected)
+//        {
+//            Debug.Log("已经连接，请勿重复连接！");
 //            return;
 //        }
 
+//        if (isConnecting)
+//        {
+//            Debug.Log("正在连接中，请稍后再试！");
+//            return;
+//        }
+//        //初始化
+//        Init();
+//        isConnecting = true;
+//        socket.BeginConnect(ip, port, ConnectCallback, socket);
+//    }
+
+//    /// <summary>
+//    /// 连接回调函数
+//    /// </summary>
+//    /// <param name="ar"></param>
+//    private static void ConnectCallback(IAsyncResult ar)
+//    {
+//        try
+//        {
+//            Socket socket = (Socket)ar.AsyncState;
+//            socket.EndConnect(ar);
+//            Debug.Log("连接成功");
+//            FireEvent(NetEvent.ConnectSucc);
+//            isConnecting = false;
+//            //接收消息
+//            socket.BeginReceive(byteArray.bytes, byteArray.writeIndex, byteArray.Remain, SocketFlags.None, ReceiveCallback, socket);
+//        }
+//        catch (SocketException e)
+//        {
+//            Debug.LogError("连接失败: " + e.Message);
+//            FireEvent(NetEvent.ConnectFail, e.Message);
+//            isConnecting = false;
+//        }
+//    }
+
+//    /// <summary>
+//    /// 接收消息回调函数
+//    /// </summary>
+//    /// <param name="ar"></param>
+//    private static void ReceiveCallback(IAsyncResult ar)
+//    {
+//        try
+//        {
+//            Socket socket = (Socket)ar.AsyncState;
+//            //接受的数据量
+//            int count = socket.EndReceive(ar);
+//            //断开连接
+//            if (count == 0)
+//            {
+//                Close();
+//                return;
+//            }
+//            //接收数据
+//            byteArray.writeIndex += count;
+
+//            //处理消息
+//            OnReceiveData();
+//            //如果长度过小，扩容
+//            if (byteArray.Remain < 8)
+//            {
+//                byteArray.MoveBytes();
+//                byteArray.ReSize(byteArray.bytes.Length * 2);
+//            }
+//            socket.BeginReceive(byteArray.bytes, byteArray.writeIndex, byteArray.Remain, SocketFlags.None, ReceiveCallback, socket);
+//        }
+//        catch (SocketException e)
+//        {
+//            Debug.LogError("接收失败: " + e.Message);
+//        }
+//    }
+
+//    private static void Close()
+//    {
+//        if (socket == null || !socket.Connected)
+//        {
+//            return;
+//        }
+//        if (isConnecting)
+//            return;
+//        //消息还没有发送完
+//        if (writeQueue.Count > 0)
+//        {
+//            isClosing = true;
+//        }
+//        else
+//        {
+//            socket.Close();
+//            FireEvent(NetEvent.Close);
+//        }
+//    }
+
+//    /// <summary>
+//    /// 处理接收的数据
+//    /// </summary>
+//    private static void OnReceiveData()
+//    {
+//        if (byteArray.Length <= 2)
+//        {
+//            return;
+//        }
+//        byte[] bytes = byteArray.bytes;
+//        int readIndex = byteArray.readIndex;
+//        //short length = (short)(bytes[readIndex + 1] * 256 + bytes[readIndex]);
+//        short length = (short)((bytes[readIndex] & 0x00FF) | (bytes[readIndex + 1] << 8));
+
+//        if (byteArray.Length < length + 2)
+//        {
+//            return;
+//        }
+//        byteArray.readIndex += 2;
+//        int nameCount = 0;
+//        string protoName = MsgBase.DecodeName(byteArray.bytes, byteArray.readIndex, out nameCount);
+
+//        if (string.IsNullOrEmpty(protoName))
+//        {
+//            Debug.LogError("协议名为空");
+//            return;
+//        }
+//        byteArray.readIndex += nameCount;
+
+//        //解析协议体
+//        int bodyLength = length - nameCount;
+//        MsgBase msgBase = MsgBase.Decode(protoName, byteArray.bytes, byteArray.readIndex, bodyLength);
+//        byteArray.readIndex += bodyLength;
+
+//        //移动数据
+//        byteArray.MoveBytes();
+
+//        //添加到消息列表
+//        lock (msgList)
+//        {
+//            msgList.Add(msgBase);
+//        }
+
+//        //继续接收数据
+//        if (byteArray.Length > 2)
+//        {
+//            OnReceiveData();
+//        }
+//    }
+
+//    /// <summary>
+//    /// 发送协议
+//    /// </summary>
+//    /// <param name="msgBase"></param>
+//    public static void Send(MsgBase msgBase)
+//    {
+//        if (socket == null || !socket.Connected)
+//        {
+//            Debug.LogError("Socket未连接");
+//            return;
+//        }
+//        if (isConnecting)
+//        {
+//            return;
+//        }
+//        if (isClosing)
+//        {
+//            return;
+//        }
 //        //编码
 //        byte[] nameBytes = MsgBase.EncodeName(msgBase);
 //        byte[] bodyBytes = MsgBase.Encode(msgBase);
@@ -213,313 +365,450 @@
 //        Array.Copy(nameBytes, 0, sendBytes, 2, nameBytes.Length);
 //        Array.Copy(bodyBytes, 0, sendBytes, 2 + nameBytes.Length, bodyBytes.Length);
 
-//        try
+//        ByteArray byteArray = new ByteArray(sendBytes);
+//        int count = 0;
+//        lock (writeQueue)
 //        {
-//            state.socket.Send(sendBytes, 0, sendBytes.Length, SocketFlags.None);
+//            writeQueue.Enqueue(byteArray);
+//            count = writeQueue.Count;
 //        }
-//        catch (SocketException e)
+//        if (count == 1)
 //        {
-//            Console.WriteLine("Send 失败" + e.Message);
+//            socket.BeginSend(byteArray.bytes, 0, byteArray.Length, SocketFlags.None, SendCallback, socket);
 //        }
 //    }
 
 //    /// <summary>
-//    /// 关闭对应的客户端
+//    /// 发送回调函数
 //    /// </summary>
-//    /// <param name="state"></param>
-//    private static void Close(ClientState state)
+//    /// <param name="ar"></param>
+//    private static void SendCallback(IAsyncResult ar)
 //    {
-//        state.socket.Close();
-//        states.Remove(state.socket);
-//    }
-
-//    /// <summary>
-//    /// 获取时间戳
-//    /// </summary>
-//    /// <returns></returns>
-//    public static long GetTimeStamp()
-//    {
-//        TimeSpan ts = DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-//        return Convert.ToInt64(ts.TotalSeconds);
-//    }
-
-//    private static void CheckPing()
-//    {
-//        foreach (var state in states.Values)
+//        Socket socket = ar.AsyncState as Socket;
+//        if (socket == null || !socket.Connected)
 //        {
-//            if (GetTimeStamp() - state.lastPingTime > pingInterval * 4)
+//            return;
+//        }
+//        int count = socket.EndSend(ar);
+
+//        ByteArray ba;
+//        lock (writeQueue)
+//        {
+//            ba = writeQueue.First();
+//        }
+
+//        ba.readIndex += count;
+//        //如果发送完毕，移除队列
+//        if (ba.Length == 0)
+//        {
+//            lock (writeQueue)
 //            {
-//                Console.WriteLine("心跳机制，断开连接" + state.socket.RemoteEndPoint.ToString());
-//                //关闭客户端
-//                Close(state);
-//                return;
+//                //清除
+//                writeQueue.Dequeue();
+//                //取到下一个
+//                ba = writeQueue.First();
+//            }
+//        }
+//        //如果还有数据，继续发送
+//        if (ba != null)
+//        {
+//            socket.BeginSend(ba.bytes, ba.readIndex, ba.Length, SocketFlags.None, SendCallback, socket);
+//        }
+//        if (isClosing)
+//        {
+//            socket.Close();
+//        }
+//    }
+
+//    /// <summary>
+//    /// 处理消息
+//    /// </summary>
+//    private static void MsgUpdate()
+//    {
+//        //没有消息
+//        if(msgList.Count == 0)
+//        {
+//            return;
+//        }
+
+//        for (int i = 0; i < processMsgCount; i++)
+//        {
+//            MsgBase msgBase = null;
+//            lock(msgList)
+//            {
+//                if(msgList.Count > 0)
+//                {
+//                    msgBase = msgList[0];
+//                    msgList.RemoveAt(0);
+//                }
+//            }
+
+//            if(msgBase != null)
+//            {
+//                FireMsg(msgBase.protoName, msgBase);
+//            }
+//            else
+//            {
+//                break;
 //            }
 //        }
 //    }
+
+//    private static void PingUpdate()
+//    {
+//        if(!isUsePing)
+//        {
+//            return;
+//        }
+//        if(Time.time - lastPingTime > pingInterval)
+//        {
+//            //发送
+//            MsgBase msgBase = new MsgPing();
+//            Send(msgBase);
+//            lastPingTime = Time.time;
+//        }
+//        //断开的处理
+//        if(Time.time - lastPongTime > pingInterval * 4)
+//        {
+//            Debug.Log("Ping超时！");
+//            Close();
+//        }
+//    }
+
+//    public static void Update()
+//    {
+//        PingUpdate();
+//        MsgUpdate();
+//    }
+
+//    private static void OnMsgPong(MsgBase msgBase)
+//    {
+//        lastPongTime = Time.time;
+//    }
 //}
+
 
 using ProtoBuf;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
-using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
 #nullable disable
 
 public static class NetManager
 {
-    /// <summary>
-    /// 服务端Socket
-    /// </summary>
-    public static Socket listenfd;
-    /// <summary>
-    /// 客户端字典
-    /// </summary>
-    public static Dictionary<Socket, ClientState> states = new Dictionary<Socket, ClientState>();
-    /// <summary>
-    /// 用于检测的列表
-    /// </summary>
-    public static List<Socket> sockets = new List<Socket>();
-
-    private static float pingInterval = 2;
-    /// <summary>
-    /// 连接服务器
-    /// </summary>
-    /// <param name="ip"></param>
-    /// <param name="port"></param>
-    public static void Connect(string ip, int port)
+    public enum ServerType
     {
-        listenfd = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-        IPAddress ipAddress = IPAddress.Parse(ip);
-        IPEndPoint ipEndPoint = new IPEndPoint(ipAddress, port);
-        listenfd.Bind(ipEndPoint);
-        listenfd.Listen(0);
-
-        Console.WriteLine("服务器启动成功");
-        while (true)
-        {
-            sockets.Clear();
-            //放服务端的socket
-            sockets.Add(listenfd);
-            //放客户端的socket
-            foreach (Socket socket in states.Keys)
-            {
-                sockets.Add(socket);
-            }
-            Socket.Select(sockets, null, null, 1000);
-            for (int i = 0; i < sockets.Count; i++)
-            {
-                Socket s = sockets[i];
-                if (s == listenfd)
-                {
-                    //有客户端连接
-                    Accept(s);
-                }
-                else
-                {
-                    //客户端有消息发送过来
-                    Receive(s);
-                }
-            }
-            CheckPing();
-        }
+        Gateway,//网关服务器
+        Fighter,//战斗服务器
     }
-
+    private static Socket socket;
     /// <summary>
-    /// 接收
+    /// 字节数组
     /// </summary>
-    /// <param name="listenfd"></param>
-    private static void Accept(Socket listenfd)
-    {
-        try
-        {
-            Socket socket = listenfd.Accept();
-            Console.WriteLine("Accept成功" + socket.RemoteEndPoint.ToString());
-            ClientState state = new ClientState();
-            state.socket = socket;
-            state.lastPingTime = GetTimeStamp();
-            states.Add(socket, state);
-        }
-        catch (SocketException e)
-        {
-            Console.WriteLine("Accept失败" + e.Message);
-        }
-    }
-
+    private static ByteArray byteArray;
     /// <summary>
-    /// 接收客户端发过来的消息
+    /// 消息列表
     /// </summary>
-    /// <param name="s"></param>
-    private static void Receive(Socket socket)
-    {
-        ClientState clientState = states[socket];
-        ByteArray readBuffer = clientState.readBuffer;
-
-        if (readBuffer.Remain <= 0)
-        {
-            readBuffer.MoveBytes();
-        }
-        if (readBuffer.Remain <= 0)
-        {
-            Console.WriteLine("Receive失败，数组不够大");
-            Close(clientState);
-            return;
-        }
-
-        int count = 0;
-        try
-        {
-            count = socket.Receive(readBuffer.bytes, readBuffer.writeIndex, readBuffer.Remain, SocketFlags.None);
-        }
-        catch (SocketException e)
-        {
-            Console.WriteLine("Receive 失败," + e.Message);
-            Close(clientState);
-            return;
-        }
-
-        //客户端主动关闭
-        if (count <= 0)
-        {
-            Console.WriteLine("Socket Close:" + socket.RemoteEndPoint.ToString());
-            Close(clientState);
-            return;
-        }
-        readBuffer.writeIndex += count;
-        //处理消息
-        OnReceiveData(clientState);
-        readBuffer.MoveBytes();
-    }
-
+    private static List<IExtensible> msgList;
     /// <summary>
-    /// 处理消息
+    /// 是否正在连接
     /// </summary>
-    /// <param name="state">客户端对象</param>
-    private static void OnReceiveData(ClientState state)
+    private static bool isConnecting;
+    /// <summary>
+    /// 是否正在关闭
+    /// </summary>
+    private static bool isClosing;
+    /// <summary>
+    /// 发送队列
+    /// </summary>
+    private static Queue<ByteArray> writeQueue;
+    /// <summary>
+    /// 一帧处理的最大消息数量
+    /// </summary>
+    private static int processMsgCount = 10;
+    /// <summary>
+    /// 是否启用心跳机制
+    /// </summary>
+    private static bool isUsePing = true;
+    /// <summary>
+    /// 上一次发送ping的时间
+    /// </summary>
+    private static float lastPingTime = 0;
+    /// <summary>
+    /// 上一次接收pong的时间
+    /// </summary>
+    private static float lastPongTime = 0;
+    /// <summary>
+    /// 心跳机制的间隔时间
+    /// </summary>
+    private static float pingInterval = 2f;
+    
+    /// <summary>
+    /// 消息处理委托
+    /// </summary>
+    /// <param name="msgBase"></param>
+    public delegate void MsgListener(IExtensible msgBase);
+    /// <summary>
+    /// 消息事件字典
+    /// </summary>
+    private static Dictionary<string, MsgListener> msgListener = new Dictionary<string, MsgListener>();
+    /// <summary>
+    /// 添加事件监听
+    /// </summary>
+    /// <param name="msgName"></param>
+    /// <param name="listener"></param>
+    public static void AddMsgListener(string msgName, MsgListener listener)
     {
-        ByteArray readBuffer = state.readBuffer;
-        byte[] bytes = readBuffer.bytes;
-        int readIndex = readBuffer.readIndex;
-
-        if (readBuffer.Length < 2)
+        if (msgListener.ContainsKey(msgName))
         {
-            return;
-        }
-        //解析总长度
-        short length = (short)(bytes[readIndex] + (bytes[readIndex + 1] << 8));
-        //收到的消息没有解析出来的多
-        if (readBuffer.Length < length)
-        {
-            return;
-        }
-        readBuffer.readIndex += 2;
-
-        int nameCount = 0;
-        string protoName = ProtobufTool.DecodeName(readBuffer.bytes, readBuffer.readIndex, out nameCount);
-        if (protoName == "")
-        {
-            Console.WriteLine("OnReceiveData 失败，协议名为空");
-            Close(state);
-            return;
-        }
-        readBuffer.readIndex += nameCount;
-
-        //解析消息体
-        int bodyLength = length - nameCount;
-        IExtensible msgBase = ProtobufTool.Decode(protoName, readBuffer.bytes, readBuffer.readIndex, bodyLength);
-        readBuffer.readIndex += bodyLength;
-        readBuffer.MoveBytes();
-
-        //通过反射调用客户端发过来的协议对应的方法
-        MethodInfo methodInfo = typeof(MsgHandler).GetMethod(protoName);
-        Console.WriteLine("ReceiveData:" + protoName + " " + state.socket.RemoteEndPoint.ToString());
-        if (methodInfo != null)
-        {
-            //要执行方法的参数
-            object[] o = { state, msgBase };
-            //调用方法
-            methodInfo.Invoke(null, o);
+            msgListener[msgName] += listener;
         }
         else
         {
-            Console.WriteLine("OnReceiveData 失败，方法不存在" + protoName);
+            msgListener.Add(msgName, listener);
         }
-
-        if (readBuffer.Length > 2)
+    }
+    /// <summary>
+    /// 移除事件监听
+    /// </summary>
+    /// <param name="msgName"></param>
+    /// <param name="listener"></param>
+    public static void RemoveMsgListener(string msgName, MsgListener listener)
+    {
+        if (msgListener.ContainsKey(msgName))
         {
-            OnReceiveData(state);
+            msgListener[msgName] -= listener;
+            if (msgListener[msgName] == null)
+            {
+                msgListener.Remove(msgName);
+            }
+        }
+    }
+    /// <summary>
+    /// 封发消息事件
+    /// </summary>
+    /// <param name="msgName"></param>
+    /// <param name="msgBase"></param>
+    public static void FireMsg(string msgName, IExtensible msgBase)
+    {
+        if (msgListener.ContainsKey(msgName))
+        {
+            msgListener[msgName].Invoke(msgBase);
         }
     }
 
     /// <summary>
-    /// 发送消息
+    /// 初始化
     /// </summary>
-    /// <param name="state">客户端对象</param>
-    /// <param name="msgBase">消息</param>
-    public static void Send(ClientState state, IExtensible msgBase)
+    private static void Init()
     {
-        if (state == null || state.socket == null || !state.socket.Connected)
+        socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        byteArray = new ByteArray();
+        msgList = new List<IExtensible>();
+        writeQueue = new Queue<ByteArray>();
+        isConnecting = false;
+        isClosing = false;
+    }
+
+    public static void Connect(string ip, int port)
+    {
+        if (socket != null && socket.Connected)
         {
-            Console.WriteLine("Send 失败，客户端对象为空或socket为空或未连接");
+            Console.WriteLine("已经连接，请勿重复连接！");
             return;
         }
 
+        if (isConnecting)
+        {
+            Console.WriteLine("正在连接中，请稍后再试！");
+            return;
+        }
+        //初始化
+        Init();
+        isConnecting = true;
+        socket.BeginConnect(ip, port, ConnectCallback, socket);
+    }
+
+    /// <summary>
+    /// 连接回调函数
+    /// </summary>
+    /// <param name="ar"></param>
+    private static void ConnectCallback(IAsyncResult ar)
+    {
+        try
+        {
+            Socket socket = (Socket)ar.AsyncState;
+            socket.EndConnect(ar);
+            Console.WriteLine("连接成功");
+            isConnecting = false;
+            //接收消息
+            socket.BeginReceive(byteArray.bytes, byteArray.writeIndex, byteArray.Remain, SocketFlags.None, ReceiveCallback, socket);
+        }
+        catch (SocketException e)
+        {
+            Console.WriteLine("连接失败: " + e.Message);
+            isConnecting = false;
+        }
+    }
+
+    /// <summary>
+    /// 接收消息回调函数
+    /// </summary>
+    /// <param name="ar"></param>
+    private static void ReceiveCallback(IAsyncResult ar)
+    {
+        try
+        {
+            Socket socket = (Socket)ar.AsyncState;
+            //接受的数据量
+            int count = socket.EndReceive(ar);
+            //断开连接
+            if (count == 0)
+            {
+                Close();
+                return;
+            }
+            //接收数据
+            byteArray.writeIndex += count;
+
+            //处理消息
+            OnReceiveData();
+            //如果长度过小，扩容
+            if (byteArray.Remain < 8)
+            {
+                byteArray.MoveBytes();
+                byteArray.ReSize(byteArray.bytes.Length * 2);
+            }
+            socket.BeginReceive(byteArray.bytes, byteArray.writeIndex, byteArray.Remain, SocketFlags.None, ReceiveCallback, socket);
+        }
+        catch (SocketException e)
+        {
+            Console.WriteLine("接收失败: " + e.Message);
+        }
+    }
+
+    private static void Close()
+    {
+        if (socket == null || !socket.Connected)
+        {
+            return;
+        }
+        if (isConnecting)
+            return;
+        //消息还没有发送完
+        if (writeQueue.Count > 0)
+        {
+            isClosing = true;
+        }
+        else
+        {
+            socket.Close();
+        }
+    }
+
+    /// <summary>
+    /// 处理接收的数据
+    /// </summary>
+    private static void OnReceiveData()
+    {
+        if (byteArray.Length <= 2)
+        {
+            return;
+        }
+        byte[] bytes = byteArray.bytes;
+        int readIndex = byteArray.readIndex;
+        //short length = (short)(bytes[readIndex + 1] * 256 + bytes[readIndex]);
+        short length = (short)((bytes[readIndex] & 0x00FF) | (bytes[readIndex + 1] << 8));
+
+        if (byteArray.Length < length + 2)
+        {
+            return;
+        }
+        byteArray.readIndex += 2;
+        int nameCount = 0;
+        string protoName = ProtobufTool.DecodeName(byteArray.bytes, byteArray.readIndex, out nameCount);
+
+        if (string.IsNullOrEmpty(protoName))
+        {
+            Console.WriteLine("协议名为空");
+            return;
+        }
+        byteArray.readIndex += nameCount;
+
+        //解析协议体
+        int bodyLength = length - nameCount;
+        IExtensible msgBase = ProtobufTool.Decode(protoName, byteArray.bytes, byteArray.readIndex, bodyLength);
+        byteArray.readIndex += bodyLength;
+
+        //移动数据
+        byteArray.MoveBytes();
+
+        //添加到消息列表
+        lock (msgList)
+        {
+            msgList.Add(msgBase);
+        }
+
+        //继续接收数据
+        if (byteArray.Length > 2)
+        {
+            OnReceiveData();
+        }
+    }
+
+    /// <summary>
+    /// 发送协议
+    /// </summary>
+    /// <param name="msgBase"></param>
+    public static void Send(IExtensible msgBase, uint guid)
+    {
+        if (socket == null || !socket.Connected)
+        {
+            Console.WriteLine("Socket未连接");
+            return;
+        }
+        if (isConnecting)
+        {
+            return;
+        }
+        if (isClosing)
+        {
+            return;
+        }
         //编码
         byte[] nameBytes = ProtobufTool.EncodeName(msgBase);
         byte[] bodyBytes = ProtobufTool.Encode(msgBase);
         //消息长度
-        int length = nameBytes.Length + bodyBytes.Length;
+        int length = nameBytes.Length + bodyBytes.Length + 1;
         //消息体
         byte[] sendBytes = new byte[2 + length];
         sendBytes[0] = (byte)(length % 256);
         sendBytes[1] = (byte)(length / 256);
-        Array.Copy(nameBytes, 0, sendBytes, 2, nameBytes.Length);
-        Array.Copy(bodyBytes, 0, sendBytes, 2 + nameBytes.Length, bodyBytes.Length);
+        sendBytes[2] = (byte)(guid >> 24); // 高位字节
+        sendBytes[3] = (byte)((guid >> 16) & 0xff); // 次高位字节
+        sendBytes[4] = (byte)((guid >> 8) & 0xff);  // 次低位字节
+        sendBytes[5] = (byte)(guid & 0xff); // 低位字节
+        Array.Copy(nameBytes, 0, sendBytes, 6, nameBytes.Length);
+        Array.Copy(bodyBytes, 0, sendBytes, 6 + nameBytes.Length, bodyBytes.Length);
 
-        try
-        {
-            state.socket.Send(sendBytes, 0, sendBytes.Length, SocketFlags.None);
-        }
-        catch (SocketException e)
-        {
-            Console.WriteLine("Send 失败" + e.Message);
-        }
+        socket.BeginSend(byteArray.bytes, 0, byteArray.Length, SocketFlags.None, SendCallback, socket);
     }
 
     /// <summary>
-    /// 关闭对应的客户端
+    /// 发送回调函数
     /// </summary>
-    /// <param name="state"></param>
-    private static void Close(ClientState state)
+    /// <param name="ar"></param>
+    private static void SendCallback(IAsyncResult ar)
     {
-        state.socket.Close();
-        states.Remove(state.socket);
-    }
-
-    /// <summary>
-    /// 获取时间戳
-    /// </summary>
-    /// <returns></returns>
-    public static long GetTimeStamp()
-    {
-        TimeSpan ts = DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-        return Convert.ToInt64(ts.TotalSeconds);
-    }
-
-    private static void CheckPing()
-    {
-        foreach (var state in states.Values)
+        Socket socket = ar.AsyncState as Socket;
+        if (socket == null || !socket.Connected)
         {
-            if (GetTimeStamp() - state.lastPingTime > pingInterval * 4)
-            {
-                Console.WriteLine("心跳机制，断开连接" + state.socket.RemoteEndPoint.ToString());
-                //关闭客户端
-                Close(state);
-                return;
-            }
+            return;
         }
+        socket.EndSend(ar);
     }
 }
-

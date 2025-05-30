@@ -854,7 +854,7 @@ public static class NetManager
         byte[] nameBytes = ProtobufTool.EncodeName(msgBase);
         byte[] bodyBytes = ProtobufTool.Encode(msgBase);
         //消息长度
-        int length = nameBytes.Length + bodyBytes.Length;
+        int length = nameBytes.Length + bodyBytes.Length + 1;
         //消息体
         byte[] sendBytes = new byte[2 + length];
         sendBytes[0] = (byte)(length % 256);
@@ -964,7 +964,7 @@ public static class NetManager
         {
             //发送
             IExtensible msgBase = new MsgPing();
-            Send(msgBase);
+            Send(msgBase, ServerType.Gateway);
             lastPingTime = Time.time;
         }
         //断开的处理
